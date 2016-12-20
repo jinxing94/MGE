@@ -45,7 +45,7 @@ struct components{
 };
 
 char train_file[MAX_STRING], output_file[MAX_STRING], comp_file[MAX_STRING],char2comp_file[MAX_STRING];
-char non_comp[MAX_STRING]
+char non_comp[MAX_STRING];
 struct vocab_word *vocab;
 struct char_component char2comp[CHAR_SIZE];
 struct components *comp_array;
@@ -273,7 +273,7 @@ void LearnVocabFromTrainFile() {
     exit(1);
   }
   vocab_size = 0;
-  AddWordToVocab((char *)"</s>");
+  AddWordToVocab((char *)"</s>",0);
   if (strlen(non_comp)) LearnNonCompWord();
   while (1) {
     ReadWord(word, fin);
@@ -285,7 +285,7 @@ void LearnVocabFromTrainFile() {
     }
     i = SearchVocab(word);
     if (i == -1) {
-      a = AddWordToVocab(word);
+      a = AddWordToVocab(word, 0);
       vocab[a].cn = 1;
     } else vocab[i].cn++;
     if (vocab_size > vocab_hash_size * 0.7) ReduceVocab();
@@ -490,16 +490,16 @@ void *TrainModelThread(void *id) {
       if (c >= sentence_length) continue;
       last_word = sen[c];
       if (last_word == -1) continue;
-      for (c = 0; c < dim; c++) neuchar[c] = syn0[c + last_word * dim];
+      for (c = 0; c < layer1_size; c++) neuchar[c] = syn0[c + last_word * layer1_size];
       if (vocab[last_word].character_size > 0){
         for (c = 0; c < vocab[last_word].character_size; c++) {
-          charv_id = vocab[last_word].character[c];
-          for (d = 0; d < dim; d++) neuchar[d] += charv[d + charv_id * dim] / vocab[last_word].character_size;
-          charv_id_list[char_list_cnt++] = charv_id;
+          char_id = vocab[last_word].character[c];
+          for (d = 0; d < layer1_size; d++) neuchar[d] += synchar[d + char_id * layer1_size] / vocab[last_word].character_size;
+          char_id_list[char_list_cnt++] = char_id;
         }
-        for (d = 0; d < dim; d++) neu1char[d] /= 2;
+        for (d = 0; d < layer1_size; d++) neuchar[d] /= 2;
       }
-      for (c = 0; c < dim; c++) neu1[c] += neu1char[c]; 
+      for (c = 0; c < layer1_size; c++) neu1[c] += neuchar[c]; 
       cw++;
     }
     if (cw) {
@@ -556,15 +556,15 @@ void *TrainModelThread(void *id) {
           if (c >= sentence_length) continue;
           last_word = sen[c];
           if (last_word == -1) continue;
-          for (c = 0; c < dim; c++) syn0[c + last_word * dim] += neu1_grad[c];
+          for (c = 0; c < layer1_size; c++) syn0[c + last_word * layer1_size] += neu1_grad[c];
         }
       for (a = 0; a < char_list_cnt; a++) {
-        charv_id = charv_id_list[a];
-        for (c = 0; c < dim; c++) synchar[c + charv_id * dim] += neuchar_grad[c];
+        char_id = char_id_list[a];
+        for (c = 0; c < layer1_size; c++) synchar[c + char_id * layer1_size] += neuchar_grad[c];
       }
       for (a = 0; a < comp_list_cnt; a++) {
         comp_id = comp_id_list[a];
-        for (c = 0; c < dim; c++) syncomp[c + comp_id * layer1_size] += neucomp_grad[c];
+        for (c = 0; c < layer1_size; c++) syncomp[c + comp_id * layer1_size] += neucomp_grad[c];
       }
     }
     sentence_position++;
@@ -580,7 +580,7 @@ void *TrainModelThread(void *id) {
 }
 
 void TrainModel(){
-  long a, b, c, d;
+  long a, b, c, d, char_id;
   FILE *fo;
   real *vec = calloc(layer1_size, sizeof(real));
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
@@ -680,8 +680,6 @@ int main(int argc, char **argv) {
     printf("\t\tUse component list from <file>\n");
     printf("\t-char2comp <file>\n");
     printf("\t\tObtain the mapping between characters and their components from <file>\n");
-    printf("\t-join-type <int>\n");
-    printf("\t\t The type of methods combining subwords (default = 1 = sum loss)\n");
     printf("\nExamples:\n");
     printf("./mge -train data.txt -output vec.txt -debug 2 -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1\n\n");
     return 0;
@@ -702,7 +700,6 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
   if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
-  if ((i = ArgPos((char *)"-join-type", argc, argv)) > 0) join_type = atoi(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   comp_array = (struct components *)calloc(comp_max_size, sizeof(struct components));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
