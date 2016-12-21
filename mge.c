@@ -348,7 +348,7 @@ void LearnCharComponentsFromFile() {
     wchar_t wstr[MAX_STRING];
     unsigned int wlen = mbstowcs(wstr, pch, MAX_STRING);
     int id = wstr[0] - MIN_CHINESE;
-    printf("%s   %d \n", pch, id);
+    //printf("%s   %d \n", pch, id);
     if (id < 0 || id > CHAR_SIZE) continue;
     char2comp[id].comp_size = num;
     char2comp[id].comp = calloc(char2comp[id].comp_size, sizeof(int));           //
